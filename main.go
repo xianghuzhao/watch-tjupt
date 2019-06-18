@@ -161,7 +161,7 @@ func notify(torrents []torrent) {
 			Message: fmt.Sprintf("%s %s\n%s", typeGBK, t.Size, titleGBK),
 			//Icon:    "go.png", // This file must exist (remove this line if it doesn't)
 			Actions: []toast.Action{
-				{Type: "protocol", Label: "Open webpage", Arguments: "https://tjupt.org/torrents.php"},
+				{Type: "protocol", Label: "Open webpage", Arguments: torrentURL},
 				{Type: "protocol", Label: "Download torrent", Arguments: t.URL},
 				{Type: "protocol", Label: "Dismiss", Arguments: ""},
 			},
