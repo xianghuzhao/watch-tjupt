@@ -70,17 +70,20 @@ func getPage() []torrent {
 
 	res, err := client.Do(req)
 	if err != nil {
-		logger.Fatalln("Download page error:", err)
+		logger.Println("Download page error:", err)
+		return nil
 	}
 	defer res.Body.Close()
 
 	if res.StatusCode != http.StatusOK {
-		logger.Fatalf("Get error %d: %s\n", res.StatusCode, res.Status)
+		logger.Printf("Get error %d: %s\n", res.StatusCode, res.Status)
+		return nil
 	}
 
 	doc, err := goquery.NewDocumentFromReader(res.Body)
 	if err != nil {
-		logger.Fatalln(err)
+		logger.Println(err)
+		return nil
 	}
 
 	var result []torrent
@@ -98,7 +101,8 @@ func getPage() []torrent {
 		layout := "2006-01-02 15:04:05"
 		torrentTime, err := time.ParseInLocation(layout, torrentTimeStr, loc)
 		if err != nil {
-			logger.Fatalln(err)
+			logger.Println("Parse time error:", err)
+			return
 		}
 		diff := time.Now().Sub(torrentTime)
 		if diff > time.Duration(cfg.MinDiff)*time.Second {
@@ -113,7 +117,7 @@ func getPage() []torrent {
 		imgDownload := torrentLine.Eq(1).Find("img.download")
 		torrentURL, exist := imgDownload.Parent().Parent().Find("a").Attr("href")
 		if !exist {
-			logger.Println("Not exist a href")
+			logger.Println("Not found a href")
 			return
 		}
 		torrentID := torrentURL[16:]
@@ -157,7 +161,7 @@ func notify(torrents []torrent) {
 
 		notification := toast.Notification{
 			AppID:   "Watch TJUPT",
-			Title:   "New Post",
+			Title:   "New Torrent",
 			Message: fmt.Sprintf("%s %s\n%s", typeGBK, t.Size, titleGBK),
 			//Icon:    "go.png", // This file must exist (remove this line if it doesn't)
 			Actions: []toast.Action{
@@ -173,8 +177,18 @@ func notify(torrents []torrent) {
 	}
 }
 
+func cleanTorrent() {
+	for k, v := range torrentPool {
+		diff := time.Now().Sub(v.Time)
+		if diff > time.Duration(cfg.MinDiff)*time.Second {
+			delete(torrentPool, k)
+		}
+	}
+}
+
 func find() {
 	logger.Println("Start to find")
+	cleanTorrent()
 	notify(getPage())
 }
 
