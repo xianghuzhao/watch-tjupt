@@ -181,6 +181,7 @@ func cleanTorrent() {
 	for k, v := range torrentPool {
 		diff := time.Now().Sub(v.Time)
 		if diff > time.Duration(cfg.MinDiff)*time.Second {
+			logger.Println("Clean torrent:", v.Title)
 			delete(torrentPool, k)
 		}
 	}
