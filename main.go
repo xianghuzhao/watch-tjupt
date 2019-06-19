@@ -97,14 +97,13 @@ func getPage() []torrent {
 			return
 		}
 
-		loc, _ := time.LoadLocation("Local")
 		layout := "2006-01-02 15:04:05"
-		torrentTime, err := time.ParseInLocation(layout, torrentTimeStr, loc)
+		torrentTime, err := time.ParseInLocation(layout, torrentTimeStr, time.Local)
 		if err != nil {
 			logger.Println("Parse time error:", err)
 			return
 		}
-		diff := time.Now().Sub(torrentTime)
+		diff := time.Since(torrentTime)
 		if diff > time.Duration(cfg.MinDiff)*time.Second {
 			return
 		}
@@ -179,7 +178,7 @@ func notify(torrents []torrent) {
 
 func cleanTorrent() {
 	for k, v := range torrentPool {
-		diff := time.Now().Sub(v.Time)
+		diff := time.Since(v.Time)
 		if diff > time.Duration(cfg.MinDiff)*time.Second {
 			logger.Println("Clean torrent:", v.Title)
 			delete(torrentPool, k)
@@ -187,10 +186,32 @@ func cleanTorrent() {
 	}
 }
 
-func find() {
-	logger.Println("Start to find")
+func search() {
+	logger.Println("Searching for new torrent...")
 	cleanTorrent()
 	notify(getPage())
+}
+
+func timer() {
+	var skipper int
+	nowHour := time.Now().Hour()
+	switch {
+	case nowHour < 2:
+		skipper = 2
+	case nowHour < 4:
+		skipper = 5
+	case nowHour < 8:
+		skipper = 10
+	case nowHour < 10:
+		skipper = 2
+	default:
+		skipper = 1
+	}
+
+	if rand.Intn(skipper) == 0 {
+		time.Sleep(time.Duration(rand.Intn(cfg.Delay)) * time.Second)
+		search()
+	}
 }
 
 func run() {
@@ -199,15 +220,14 @@ func run() {
 	wg := sync.WaitGroup{}
 	wg.Add(1)
 
-	find()
+	search()
 
 	go func() {
 		defer wg.Done()
 		for {
 			select {
 			case <-ticker.C:
-				time.Sleep(time.Duration(rand.Intn(cfg.Delay)) * time.Second)
-				find()
+				timer()
 				//ticker.Stop()
 				//return
 			case <-stop:
