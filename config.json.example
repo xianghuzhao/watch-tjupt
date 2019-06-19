@@ -3,5 +3,6 @@
   "user_agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:67.0) Gecko/20100101 Firefox/67.0",
   "min_diff": 300,
   "interval": 90,
-  "delay": 30
+  "delay": 30,
+  "save_dir": "D:\\Download"
 }

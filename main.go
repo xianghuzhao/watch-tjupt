@@ -4,9 +4,11 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
+	"io"
 	"io/ioutil"
 	"log"
 	"math/rand"
+	"mime"
 	"net/http"
 	"os"
 	"os/signal"
@@ -28,6 +30,7 @@ type config struct {
 	MinDiff   int    `json:"min_diff"`
 	Interval  int    `json:"interval"`
 	Delay     int    `json:"delay"`
+	SaveDir   string `json:"save_dir"`
 }
 
 var cfg config
@@ -59,6 +62,47 @@ func encodeGBK(s string) (string, error) {
 		return "", e
 	}
 	return string(d), nil
+}
+
+func download(url string) {
+	client := &http.Client{}
+	req, _ := http.NewRequest("GET", url, nil)
+
+	req.Header.Add("Cookie", cfg.Cookie)
+	req.Header.Add("User-Agent", cfg.UserAgent)
+	req.Header.Add("Referer", torrentURL)
+
+	res, err := client.Do(req)
+	if err != nil {
+		logger.Println("Download page error:", err)
+		return
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode != http.StatusOK {
+		logger.Printf("Get error %d: %s\n", res.StatusCode, res.Status)
+		return
+	}
+
+	contentDisposition := res.Header.Get("content-disposition")
+	_, params, err := mime.ParseMediaType(contentDisposition)
+	if err != nil {
+		logger.Println("Parse contentDisposition error:", err)
+	}
+	filename := params["filename"]
+
+	fullPath := path.Join(cfg.SaveDir, filename)
+	out, err := os.Create(fullPath)
+	if err != nil {
+		return
+	}
+	defer out.Close()
+
+	// Write the body to file
+	_, err = io.Copy(out, res.Body)
+	if err != nil {
+		logger.Printf("Write to file error \"%s\": %s\n", fullPath, err)
+	}
 }
 
 func getPage() []torrent {
@@ -146,6 +190,8 @@ func getPage() []torrent {
 		}
 
 		logger.Println(torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
+
+		download(torrentURL)
 
 		result = append(result, torrentPool[torrentID])
 	})
