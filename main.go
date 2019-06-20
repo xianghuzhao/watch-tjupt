@@ -56,6 +56,8 @@ var logger *log.Logger
 
 var torrentPool = make(map[string]torrent)
 
+var lastCheckTime time.Time
+
 func encodeGBK(s string) (string, error) {
 	I := bytes.NewReader([]byte(s))
 	O := transform.NewReader(I, simplifiedchinese.GBK.NewEncoder())
@@ -108,6 +110,8 @@ func download(url string) {
 }
 
 func getPage() []torrent {
+	startGetPageTime := time.Now()
+
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", torrentURL, nil)
 
@@ -149,8 +153,7 @@ func getPage() []torrent {
 			logger.Println("Parse time error:", err)
 			return
 		}
-		diff := time.Since(torrentTime)
-		if diff > time.Duration(cfg.MinDiff)*time.Second {
+		if torrentTime.Before(lastCheckTime) {
 			return
 		}
 
@@ -211,6 +214,8 @@ func getPage() []torrent {
 		result = append(result, torrentPool[torrentID])
 	})
 
+	lastCheckTime = startGetPageTime
+
 	return result
 }
 
@@ -250,7 +255,7 @@ func cleanTorrent() {
 
 func search() {
 	logger.Println("Searching for new torrent...")
-	cleanTorrent()
+	//cleanTorrent()
 	notify(getPage())
 }
 
@@ -281,6 +286,8 @@ func run() {
 	stop := make(chan struct{})
 	wg := sync.WaitGroup{}
 	wg.Add(1)
+
+	lastCheckTime = time.Now().Add(time.Duration(-cfg.MinDiff) * time.Second)
 
 	search()
 
