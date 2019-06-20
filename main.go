@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"strconv"
 	"sync"
 	"syscall"
 	"time"
@@ -36,12 +37,13 @@ type config struct {
 var cfg config
 
 type torrent struct {
-	Title string
-	URL   string
-	Type  string
-	Size  string
-	Time  time.Time
-	Free  bool
+	Title  string
+	URL    string
+	Type   string
+	Size   string
+	Time   time.Time
+	Free   bool
+	Sticky int
 }
 
 var torrentURL = "https://tjupt.org/torrents.php"
@@ -167,6 +169,18 @@ func getPage() []torrent {
 
 		torrentTitle := torrentLine.Eq(1).Find("a b").Text()
 
+		var torrentSticky int
+		switch {
+		case torrentLine.Eq(1).Find("img.sticky_1").Length() > 0:
+			torrentSticky = 1
+		case torrentLine.Eq(1).Find("img.sticky_2").Length() > 0:
+			torrentSticky = 2
+		case torrentLine.Eq(1).Find("img.sticky_3").Length() > 0:
+			torrentSticky = 3
+		default:
+			torrentSticky = 0
+		}
+
 		_, exist = torrentPool[torrentID]
 		if exist {
 			logger.Printf("Torrent already there: %s\n", torrentTitle)
@@ -181,15 +195,16 @@ func getPage() []torrent {
 		torrentSize := torrentLine.Eq(4).Text()
 
 		torrentPool[torrentID] = torrent{
-			Title: torrentTitle,
-			URL:   torrentURL,
-			Type:  torrentType,
-			Size:  torrentSize,
-			Time:  torrentTime,
-			Free:  torrentFree,
+			Title:  torrentTitle,
+			URL:    torrentURL,
+			Type:   torrentType,
+			Size:   torrentSize,
+			Time:   torrentTime,
+			Free:   torrentFree,
+			Sticky: torrentSticky,
 		}
 
-		logger.Println(torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
+		logger.Println("Found torrent: ", torrentSticky, torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
 
 		download(torrentURL)
 
@@ -203,11 +218,12 @@ func notify(torrents []torrent) {
 	for _, t := range torrents {
 		typeGBK, _ := encodeGBK(t.Type)
 		titleGBK, _ := encodeGBK(t.Title)
+		stickyGBK, _ := encodeGBK("置顶" + strconv.Itoa(t.Sticky))
 
 		notification := toast.Notification{
 			AppID:   "Watch TJUPT",
 			Title:   "New Torrent",
-			Message: fmt.Sprintf("%s %s\n%s", typeGBK, t.Size, titleGBK),
+			Message: fmt.Sprintf("%s %s %s\n%s", stickyGBK, typeGBK, t.Size, titleGBK),
 			//Icon:    "go.png", // This file must exist (remove this line if it doesn't)
 			Actions: []toast.Action{
 				{Type: "protocol", Label: "Open webpage", Arguments: torrentURL},
