@@ -223,7 +223,11 @@ func notify(torrents []torrent) {
 	for _, t := range torrents {
 		typeGBK, _ := encodeGBK(t.Type)
 		titleGBK, _ := encodeGBK(t.Title)
-		stickyGBK, _ := encodeGBK("置顶" + strconv.Itoa(t.Sticky))
+
+		stickyGBK, _ := encodeGBK("普通")
+		if t.Sticky != 0 {
+			stickyGBK, _ = encodeGBK("置顶" + strconv.Itoa(t.Sticky))
+		}
 
 		notification := toast.Notification{
 			AppID:   "Watch TJUPT",
