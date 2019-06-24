@@ -39,6 +39,7 @@ var cfg config
 type torrent struct {
 	Title  string
 	URL    string
+	Page   string
 	Type   string
 	Size   string
 	Time   time.Time
@@ -46,7 +47,7 @@ type torrent struct {
 	Sticky int
 }
 
-var torrentURL = "https://tjupt.org/torrents.php"
+var torrentsURL = "https://tjupt.org/torrents.php"
 var hostURL = "https://tjupt.org/"
 
 var configFilename = "config.json"
@@ -74,7 +75,7 @@ func download(url string) {
 
 	req.Header.Add("Cookie", cfg.Cookie)
 	req.Header.Add("User-Agent", cfg.UserAgent)
-	req.Header.Add("Referer", torrentURL)
+	req.Header.Add("Referer", torrentsURL)
 
 	res, err := client.Do(req)
 	if err != nil {
@@ -113,7 +114,7 @@ func getPage() []torrent {
 	startGetPageTime := time.Now()
 
 	client := &http.Client{}
-	req, _ := http.NewRequest("GET", torrentURL, nil)
+	req, _ := http.NewRequest("GET", torrentsURL, nil)
 
 	req.Header.Add("Cookie", cfg.Cookie)
 	req.Header.Add("User-Agent", cfg.UserAgent)
@@ -165,12 +166,19 @@ func getPage() []torrent {
 		imgDownload := torrentLine.Eq(1).Find("img.download")
 		torrentURL, exist := imgDownload.Parent().Parent().Find("a").Attr("href")
 		if !exist {
-			logger.Println("Not found a href")
+			logger.Println("Not found the image href")
 			return
 		}
 		torrentID := torrentURL[16:]
+		torrentURL = hostURL + torrentURL
 
-		torrentTitle := torrentLine.Eq(1).Find("a b").Text()
+		titleText := torrentLine.Eq(1).Find("a b")
+		torrentTitle, exist := titleText.Parent().Parent().Find("a").Attr("title")
+		if !exist {
+			logger.Println("Not found the torrent title")
+			return
+		}
+		torrentPage := hostURL + "details.php?id=" + torrentID
 
 		var torrentSticky int
 		switch {
@@ -190,8 +198,6 @@ func getPage() []torrent {
 			return
 		}
 
-		torrentURL = hostURL + torrentURL
-
 		typeImg := torrentLine.Eq(0).Find("img")
 		torrentType := typeImg.AttrOr("title", "Unknown")
 
@@ -200,6 +206,7 @@ func getPage() []torrent {
 		torrentPool[torrentID] = torrent{
 			Title:  torrentTitle,
 			URL:    torrentURL,
+			Page:   torrentPage,
 			Type:   torrentType,
 			Size:   torrentSize,
 			Time:   torrentTime,
@@ -230,14 +237,13 @@ func notify(torrents []torrent) {
 		}
 
 		notification := toast.Notification{
-			AppID:   "Watch TJUPT",
-			Title:   "New Torrent",
-			Message: fmt.Sprintf("%s %s %s\n%s", stickyGBK, typeGBK, t.Size, titleGBK),
-			//Icon:    "go.png", // This file must exist (remove this line if it doesn't)
+			AppID:               "Watch TJUPT",
+			Title:               "Torrent Found",
+			Message:             fmt.Sprintf("%s %s %s\n%s", stickyGBK, typeGBK, t.Size, titleGBK),
+			ActivationArguments: t.Page,
 			Actions: []toast.Action{
-				{Type: "protocol", Label: "Open webpage", Arguments: torrentURL},
+				{Type: "protocol", Label: "Torrent list", Arguments: torrentsURL},
 				{Type: "protocol", Label: "Download torrent", Arguments: t.URL},
-				{Type: "protocol", Label: "Dismiss", Arguments: ""},
 			},
 		}
 		err := notification.Push()
