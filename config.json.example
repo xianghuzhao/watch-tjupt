@@ -4,5 +4,6 @@
   "min_diff": 300,
   "interval": 90,
   "delay": 30,
-  "save_dir": "D:\\Download"
+  "save_dir": "D:\\Download",
+  "ignore_type": ["资料", "游戏"]
 }

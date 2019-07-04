@@ -26,12 +26,13 @@ import (
 )
 
 type config struct {
-	Cookie    string `json:"cookie"`
-	UserAgent string `json:"user_agent"`
-	MinDiff   int    `json:"min_diff"`
-	Interval  int    `json:"interval"`
-	Delay     int    `json:"delay"`
-	SaveDir   string `json:"save_dir"`
+	Cookie     string   `json:"cookie"`
+	UserAgent  string   `json:"user_agent"`
+	MinDiff    int      `json:"min_diff"`
+	Interval   int      `json:"interval"`
+	Delay      int      `json:"delay"`
+	SaveDir    string   `json:"save_dir"`
+	IgnoreType []string `json:"ignore_type"`
 }
 
 var cfg config
@@ -200,6 +201,11 @@ func getPage() []torrent {
 
 		typeImg := torrentLine.Eq(0).Find("img")
 		torrentType := typeImg.AttrOr("title", "Unknown")
+		for _, i := range cfg.IgnoreType {
+			if i == torrentType {
+				return
+			}
+		}
 
 		torrentSize := torrentLine.Eq(4).Text()
 
