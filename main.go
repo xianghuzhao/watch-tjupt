@@ -23,9 +23,13 @@ import (
 	"golang.org/x/text/encoding/simplifiedchinese"
 	"golang.org/x/text/transform"
 	"gopkg.in/toast.v1"
+
+	"github.com/jinzhu/gorm"
+	_ "github.com/jinzhu/gorm/dialects/sqlite"
 )
 
 type config struct {
+	DBFile     string   `json:"db_file"`
 	Cookie     string   `json:"cookie"`
 	UserAgent  string   `json:"user_agent"`
 	MinDiff    int      `json:"min_diff"`
@@ -38,15 +42,19 @@ type config struct {
 var cfg config
 
 type torrent struct {
-	Title  string
-	URL    string
-	Page   string
-	Type   string
-	Size   string
-	Time   time.Time
-	Free   bool
-	Sticky int
+	gorm.Model
+	TorrentID int
+	Title     string
+	URL       string
+	Page      string
+	Type      string
+	Size      string
+	Time      time.Time
+	Free      bool
+	Sticky    int
 }
+
+var db *gorm.DB
 
 var torrentsURL = "https://tjupt.org/torrents.php"
 var hostURL = "https://tjupt.org/"
@@ -55,8 +63,6 @@ var configFilename = "config.json"
 var logFilename = "watch-tjupt.log"
 
 var logger *log.Logger
-
-var torrentPool = make(map[string]torrent)
 
 var lastCheckTime time.Time
 
@@ -170,7 +176,12 @@ func getPage() []torrent {
 			logger.Println("Not found the image href")
 			return
 		}
-		torrentID := torrentURL[16:]
+		torrentIDStr := torrentURL[16:]
+		torrentID, err := strconv.Atoi(torrentIDStr)
+		if err != nil {
+			logger.Printf("Invalid torrent ID: %s\n", torrentIDStr)
+			return
+		}
 		torrentURL = hostURL + torrentURL
 
 		titleText := torrentLine.Eq(1).Find("a b")
@@ -179,7 +190,7 @@ func getPage() []torrent {
 			logger.Println("Not found the torrent title")
 			return
 		}
-		torrentPage := hostURL + "details.php?id=" + torrentID
+		torrentPage := hostURL + "details.php?id=" + torrentIDStr
 
 		var torrentSticky int
 		switch {
@@ -193,7 +204,8 @@ func getPage() []torrent {
 			torrentSticky = 0
 		}
 
-		_, exist = torrentPool[torrentID]
+		t := &torrent{}
+		exist = !db.Where("torrent_id = ?", torrentID).First(t).RecordNotFound()
 		if exist {
 			logger.Printf("Torrent already there: %s\n", torrentTitle)
 			return
@@ -209,22 +221,25 @@ func getPage() []torrent {
 
 		torrentSize := torrentLine.Eq(4).Text()
 
-		torrentPool[torrentID] = torrent{
-			Title:  torrentTitle,
-			URL:    torrentURL,
-			Page:   torrentPage,
-			Type:   torrentType,
-			Size:   torrentSize,
-			Time:   torrentTime,
-			Free:   torrentFree,
-			Sticky: torrentSticky,
+		t = &torrent{
+			TorrentID: torrentID,
+			Title:     torrentTitle,
+			URL:       torrentURL,
+			Page:      torrentPage,
+			Type:      torrentType,
+			Size:      torrentSize,
+			Time:      torrentTime,
+			Free:      torrentFree,
+			Sticky:    torrentSticky,
 		}
+
+		db.Create(t)
 
 		logger.Println("Found torrent: ", torrentSticky, torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
 
 		download(torrentURL)
 
-		result = append(result, torrentPool[torrentID])
+		result = append(result, *t)
 	})
 
 	lastCheckTime = startGetPageTime
@@ -259,19 +274,8 @@ func notify(torrents []torrent) {
 	}
 }
 
-func cleanTorrent() {
-	for k, v := range torrentPool {
-		diff := time.Since(v.Time)
-		if diff > time.Duration(cfg.MinDiff)*time.Second {
-			logger.Println("Clean torrent:", v.Title)
-			delete(torrentPool, k)
-		}
-	}
-}
-
 func search() {
 	logger.Println("Searching for new torrent...")
-	//cleanTorrent()
 	notify(getPage())
 }
 
@@ -342,6 +346,16 @@ func loadConfig(dir string) {
 	}
 }
 
+func loadDB() {
+	var err error
+	db, err = gorm.Open("sqlite3", cfg.DBFile)
+	if err != nil {
+		logger.Panicf("Failed to connect to database: %s\n", cfg.DBFile)
+	}
+
+	db.AutoMigrate(&torrent{})
+}
+
 func main() {
 	dir, err := filepath.Abs(filepath.Dir(os.Args[0]))
 	if err != nil {
@@ -361,6 +375,10 @@ func main() {
 	logger.Println("Start application")
 
 	loadConfig(dir)
+
+	loadDB()
+	defer db.Close()
+
 	run()
 
 	logger.Println("Exit application")
