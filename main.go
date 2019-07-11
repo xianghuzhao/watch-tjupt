@@ -14,6 +14,7 @@ import (
 	"os/signal"
 	"path"
 	"path/filepath"
+	"sort"
 	"strconv"
 	"sync"
 	"syscall"
@@ -63,8 +64,6 @@ var configFilename = "config.json"
 var logFilename = "watch-tjupt.log"
 
 var logger *log.Logger
-
-var lastCheckTime time.Time
 
 func encodeGBK(s string) (string, error) {
 	I := bytes.NewReader([]byte(s))
@@ -118,8 +117,6 @@ func download(url string) {
 }
 
 func getPage() []torrent {
-	startGetPageTime := time.Now()
-
 	client := &http.Client{}
 	req, _ := http.NewRequest("GET", torrentsURL, nil)
 
@@ -144,7 +141,7 @@ func getPage() []torrent {
 		return nil
 	}
 
-	var result []torrent
+	var torrents []torrent
 
 	doc.Find(".torrents tr").Each(func(i int, s *goquery.Selection) {
 		torrentLine := s.Find("td.rowfollow")
@@ -159,9 +156,6 @@ func getPage() []torrent {
 		torrentTime, err := time.ParseInLocation(layout, torrentTimeStr, time.Local)
 		if err != nil {
 			logger.Println("Parse time error:", err)
-			return
-		}
-		if torrentTime.Before(lastCheckTime) {
 			return
 		}
 
@@ -207,14 +201,14 @@ func getPage() []torrent {
 		t := &torrent{}
 		exist = !db.Where("torrent_id = ?", torrentID).First(t).RecordNotFound()
 		if exist {
-			logger.Printf("Torrent already there: %s\n", torrentTitle)
+			//logger.Printf("Torrent already there: %s\n", torrentTitle)
 			return
 		}
 
 		typeImg := torrentLine.Eq(0).Find("img")
 		torrentType := typeImg.AttrOr("title", "Unknown")
-		for _, i := range cfg.IgnoreType {
-			if i == torrentType {
+		for _, tp := range cfg.IgnoreType {
+			if tp == torrentType {
 				return
 			}
 		}
@@ -233,18 +227,14 @@ func getPage() []torrent {
 			Sticky:    torrentSticky,
 		}
 
-		db.Create(t)
-
 		logger.Println("Found torrent: ", torrentSticky, torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
 
 		download(torrentURL)
 
-		result = append(result, *t)
+		torrents = append(torrents, *t)
 	})
 
-	lastCheckTime = startGetPageTime
-
-	return result
+	return torrents
 }
 
 func notify(torrents []torrent) {
@@ -274,9 +264,31 @@ func notify(torrents []torrent) {
 	}
 }
 
+func sortTorrents(torrents []torrent) {
+	sort.Slice(torrents, func(i, j int) bool {
+		return torrents[i].Time.Before(torrents[j].Time)
+	})
+}
+
+func saveTorrents(torrents []torrent) {
+	for _, t := range torrents {
+		logger.Println(t)
+		db.Create(&t)
+	}
+}
+
 func search() {
 	logger.Println("Searching for new torrent...")
-	notify(getPage())
+
+	torrents := getPage()
+
+	sortTorrents(torrents)
+
+	saveTorrents(torrents)
+
+	logger.Println("Searching finished")
+
+	notify(torrents)
 }
 
 func timer() {
@@ -290,6 +302,8 @@ func timer() {
 	case nowHour < 8:
 		skipper = 10
 	case nowHour < 10:
+		skipper = 4
+	case nowHour < 18:
 		skipper = 2
 	default:
 		skipper = 1
@@ -306,8 +320,6 @@ func run() {
 	stop := make(chan struct{})
 	wg := sync.WaitGroup{}
 	wg.Add(1)
-
-	lastCheckTime = time.Now().Add(time.Duration(-cfg.MinDiff) * time.Second)
 
 	search()
 
