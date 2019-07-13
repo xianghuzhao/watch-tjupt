@@ -44,13 +44,13 @@ var cfg config
 
 type torrent struct {
 	gorm.Model
-	TorrentID int
+	TorrentID int `gorm:"index"`
 	Title     string
 	URL       string
 	Page      string
-	Type      string
+	Type      string `gorm:"index"`
 	Size      string
-	Time      time.Time
+	Time      time.Time `gorm:"index"`
 	Free      bool
 	Sticky    int
 }
@@ -272,7 +272,6 @@ func sortTorrents(torrents []torrent) {
 
 func saveTorrents(torrents []torrent) {
 	for _, t := range torrents {
-		logger.Println(t)
 		db.Create(&t)
 	}
 }
