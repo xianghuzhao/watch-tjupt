@@ -51,7 +51,7 @@ type torrent struct {
 	Type      string `gorm:"index"`
 	Size      string
 	Time      time.Time `gorm:"index"`
-	Free      bool
+	Promotion string
 	Sticky    int
 }
 
@@ -159,8 +159,37 @@ func getPage() []torrent {
 			return
 		}
 
-		torrentFree := (torrentLine.Eq(1).Find(".free").Length() > 0)
-		if !torrentFree {
+		var torrentPromotion string
+		switch {
+		case torrentLine.Eq(1).Find(".free").Length() > 0:
+			torrentPromotion = "free"
+		case torrentLine.Eq(1).Find(".twoupfree").Length() > 0:
+			torrentPromotion = "2Xfree"
+		case torrentLine.Eq(1).Find(".thirtypercent").Length() > 0:
+			torrentPromotion = "30%"
+		case torrentLine.Eq(1).Find(".twouphalfdown").Length() > 0:
+			torrentPromotion = "2X50%"
+		case torrentLine.Eq(1).Find(".halfdown").Length() > 0:
+			torrentPromotion = "50%"
+		case torrentLine.Eq(1).Find(".twoup").Length() > 0:
+			torrentPromotion = "2X"
+		default:
+			torrentPromotion = "none"
+		}
+
+		var torrentSticky int
+		switch {
+		case torrentLine.Eq(1).Find("img.sticky_1").Length() > 0:
+			torrentSticky = 1
+		case torrentLine.Eq(1).Find("img.sticky_2").Length() > 0:
+			torrentSticky = 2
+		case torrentLine.Eq(1).Find("img.sticky_3").Length() > 0:
+			torrentSticky = 3
+		default:
+			torrentSticky = 0
+		}
+
+		if torrentPromotion == "none" && torrentSticky == 0 {
 			return
 		}
 
@@ -185,18 +214,6 @@ func getPage() []torrent {
 			return
 		}
 		torrentPage := hostURL + "details.php?id=" + torrentIDStr
-
-		var torrentSticky int
-		switch {
-		case torrentLine.Eq(1).Find("img.sticky_1").Length() > 0:
-			torrentSticky = 1
-		case torrentLine.Eq(1).Find("img.sticky_2").Length() > 0:
-			torrentSticky = 2
-		case torrentLine.Eq(1).Find("img.sticky_3").Length() > 0:
-			torrentSticky = 3
-		default:
-			torrentSticky = 0
-		}
 
 		t := &torrent{}
 		exist = !db.Where("torrent_id = ?", torrentID).First(t).RecordNotFound()
@@ -223,11 +240,11 @@ func getPage() []torrent {
 			Type:      torrentType,
 			Size:      torrentSize,
 			Time:      torrentTime,
-			Free:      torrentFree,
+			Promotion: torrentPromotion,
 			Sticky:    torrentSticky,
 		}
 
-		logger.Println("Found torrent: ", torrentSticky, torrentID, torrentTime, torrentFree, torrentType, torrentSize, torrentTitle)
+		logger.Println("Found torrent: ", torrentSticky, torrentID, torrentTime, torrentPromotion, torrentType, torrentSize, torrentTitle)
 
 		download(torrentURL)
 
@@ -250,7 +267,7 @@ func notify(torrents []torrent) {
 		notification := toast.Notification{
 			AppID:               "Watch TJUPT",
 			Title:               "Torrent Found",
-			Message:             fmt.Sprintf("%s %s %s %s\n%s", stickyGBK, typeGBK, t.Size, t.Time.Format("15:04:05"), titleGBK),
+			Message:             fmt.Sprintf("%s %s %s %s %s\n%s", stickyGBK, typeGBK, t.Promotion, t.Size, t.Time.Format("15:04:05"), titleGBK),
 			ActivationArguments: t.Page,
 			Actions: []toast.Action{
 				{Type: "protocol", Label: "Torrent list", Arguments: torrentsURL},
