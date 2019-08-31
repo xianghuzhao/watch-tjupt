@@ -266,8 +266,8 @@ func notify(torrents []torrent) {
 
 		notification := toast.Notification{
 			AppID:               "Watch TJUPT",
-			Title:               "Torrent Found",
-			Message:             fmt.Sprintf("%s %s %s %s %s\n%s", stickyGBK, typeGBK, t.Promotion, t.Size, t.Time.Format("15:04:05"), titleGBK),
+			Title:               fmt.Sprintf("%s %s %s %s %s", typeGBK, stickyGBK, t.Promotion, t.Size, t.Time.Format("15:04:05")),
+			Message:             titleGBK,
 			ActivationArguments: t.Page,
 			Actions: []toast.Action{
 				{Type: "protocol", Label: "Torrent list", Arguments: torrentsURL},
