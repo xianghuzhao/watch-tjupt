@@ -33,11 +33,11 @@ type config struct {
 	DBFile     string   `json:"db_file"`
 	Cookie     string   `json:"cookie"`
 	UserAgent  string   `json:"user_agent"`
-	MinDiff    int      `json:"min_diff"`
 	Interval   int      `json:"interval"`
 	Delay      int      `json:"delay"`
 	SaveDir    string   `json:"save_dir"`
 	IgnoreType []string `json:"ignore_type"`
+	Skip       [][]int  `json:"skip"`
 }
 
 var cfg config
@@ -308,27 +308,21 @@ func search() {
 }
 
 func timer() {
-	var skipper int
+	skipper := 0
 	nowHour := time.Now().Hour()
-	switch {
-	case nowHour < 2:
-		skipper = 2
-	case nowHour < 4:
-		skipper = 5
-	case nowHour < 8:
-		skipper = 10
-	case nowHour < 10:
-		skipper = 4
-	case nowHour < 18:
-		skipper = 2
-	default:
-		skipper = 1
+
+	for _, skipLine := range cfg.Skip {
+		if nowHour >= skipLine[0] && nowHour < skipLine[1] {
+			skipper = skipLine[2]
+		}
 	}
 
-	if rand.Intn(skipper) == 0 {
-		time.Sleep(time.Duration(rand.Intn(cfg.Delay)) * time.Second)
-		search()
+	if skipper == 0 || rand.Intn(skipper) != 0 {
+		return
 	}
+
+	time.Sleep(time.Duration(rand.Intn(cfg.Delay)) * time.Second)
+	search()
 }
 
 func run() {
